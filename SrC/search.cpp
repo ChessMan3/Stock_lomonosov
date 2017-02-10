@@ -161,7 +161,8 @@ namespace {
 
   const size_t HalfDensitySize = std::extent<decltype(HalfDensity)>::value;
 
-  EasyMoveManager EasyMove;
+  EasyMoveManager EasyMove; 
+  bool study = Options["Study"];
   Value DrawValue[COLOR_NB];
 
   template <NodeType NT>
