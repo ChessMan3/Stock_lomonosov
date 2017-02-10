@@ -35,7 +35,7 @@ PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-PGOBENCH = ./$(EXE) bench 16 1 1000 default time
+PGOBENCH = ./$(EXE) bench 16 1 15
 
 ### Object files
 OBJS = benchmark.o bitbase.o bitboard.o endgame.o evaluate.o main.o \
@@ -58,20 +58,24 @@ OBJS = benchmark.o bitbase.o bitboard.o endgame.o evaluate.o main.o \
 # popcnt = yes/no     --- -DUSE_POPCNT     --- Use popcnt asm-instruction
 # sse = yes/no        --- -msse            --- Use Intel Streaming SIMD Extensions
 # pext = yes/no       --- -DUSE_PEXT       --- Use pext x86_64 asm-instruction
+# native = yes/no     --- -march=native    --- Optimize for local CPU
 #
 # Note that Makefile is space sensitive, so when adding new architectures
 # or modifying existing flags, you have to make sure there are no extra spaces
 # at the end of the line for flag values.
 
 ### 2.1. General and architecture defaults
-optimize = yes
+
 debug = no
 sanitize = no
-bits = 32
-prefetch = no
-popcnt = no
-sse = no
+optimize = yes
+arch = x86_64
+bits = 64
+prefetch = yes
+popcnt = yes
+sse = yes
 pext = no
+native = yes
 
 ### 2.2 Architecture specific
 
@@ -335,6 +339,11 @@ ifeq ($(pext),yes)
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw))
 		CXXFLAGS += -mbmi2
 	endif
+endif
+
+### native
+ifeq ($(native),yes)
+      CFLAGS += -march=native
 endif
 
 ### 3.8 Link Time Optimization, it works since gcc 4.5 but not on mingw under Windows.
