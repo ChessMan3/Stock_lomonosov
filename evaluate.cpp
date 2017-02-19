@@ -132,6 +132,7 @@ namespace {
       S( 60,113), S( 66,120), S( 67,123), S( 70,126), S( 71,133), S( 73,136),
       S( 79,140), S( 88,143), S( 88,148), S( 99,166), S(102,170), S(102,175),
       S(106,184), S(109,191), S(113,206), S(116,212) }
+    };
 
   // Outpost[knight/bishop][supported by pawn] contains bonuses for minor
   // pieces if they can reach an outpost square, bigger if that square is
