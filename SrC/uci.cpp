@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -29,7 +29,6 @@
 #include "thread.h"
 #include "timeman.h"
 #include "uci.h"
-#include "syzygy/tbprobe.h"
 
 using namespace std;
 
@@ -40,10 +39,10 @@ namespace {
   // FEN string of the initial position, normal chess
   const char* StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-  // A list to keep track of the position states along the setup moves (from the
+  // Stack to keep track of the position states along the setup moves (from the
   // start position to the position just before the search starts). Needed by
   // 'draw by repetition' detection.
-  StateListPtr States(new std::deque<StateInfo>(1));
+  Search::StateStackPtr SetupStates;
 
 
   // position() is called when engine receives the "position" UCI command.
@@ -69,14 +68,14 @@ namespace {
     else
         return;
 
-    States = StateListPtr(new std::deque<StateInfo>(1));
-    pos.set(fen, Options["UCI_Chess960"], &States->back(), Threads.main());
+    pos.set(fen, Options["UCI_Chess960"], Threads.main());
+    SetupStates = Search::StateStackPtr(new std::stack<StateInfo>);
 
     // Parse move list (if any)
     while (is >> token && (m = UCI::to_move(pos, token)) != MOVE_NONE)
     {
-        States->push_back(StateInfo());
-        pos.do_move(m, States->back());
+        SetupStates->push(StateInfo());
+        pos.do_move(m, SetupStates->top(), pos.gives_check(m, CheckInfo(pos)));
     }
   }
 
@@ -109,7 +108,7 @@ namespace {
   // the thinking time and other parameters from the input string, then starts
   // the search.
 
-  void go(Position& pos, istringstream& is) {
+  void go(const Position& pos, istringstream& is) {
 
     Search::LimitsType limits;
     string token;
@@ -133,7 +132,7 @@ namespace {
         else if (token == "infinite")  limits.infinite = 1;
         else if (token == "ponder")    limits.ponder = 1;
 
-    Threads.start_thinking(pos, States, limits);
+    Threads.start_thinking(pos, limits, SetupStates);
   }
 
 } // namespace
@@ -147,10 +146,8 @@ namespace {
 
 void UCI::loop(int argc, char* argv[]) {
 
-  Position pos;
+  Position pos(StartFEN, false, Threads.main()); // The root position
   string token, cmd;
-
-  pos.set(StartFEN, false, &States->back(), Threads.main());
 
   for (int i = 1; i < argc; ++i)
       cmd += std::string(argv[i]) + " ";
@@ -187,7 +184,6 @@ void UCI::loop(int argc, char* argv[]) {
       else if (token == "ucinewgame")
       {
           Search::clear();
-          Tablebases::init(Options["SyzygyPath"]);
           Time.availableNodes = 0;
       }
       else if (token == "isready")    sync_cout << "readyok" << sync_endl;
