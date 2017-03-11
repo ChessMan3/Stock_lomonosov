@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,35 +21,68 @@
 #include <iostream>
 
 #include "bitboard.h"
+#include "evaluate.h"
 #include "position.h"
 #include "search.h"
 #include "thread.h"
 #include "tt.h"
 #include "uci.h"
+
+#ifdef SYZYGY_TB
 #include "syzygy/tbprobe.h"
-#include "tzbook.h"
+#endif
+#ifdef LOMONOSOV_TB
+#include "lmtb.h"
+#endif
 
-namespace PSQT {
-  void init();
-}
-
+#ifdef LARGEPAGES
+void SETUP_PRIVILEGES();
+void FREE_MEM(void *);
+#endif
 int main(int argc, char* argv[]) {
 
   std::cout << engine_info() << std::endl;
+#ifdef LARGEPAGES
+  #ifndef BENCH
+    SETUP_PRIVILEGES();
+  #endif
+#endif
 
   UCI::init(Options);
+  TT.resize(Options["Hash"]);
   PSQT::init();
   Bitboards::init();
   Position::init();
   Bitbases::init();
   Search::init();
+  Eval::init();
   Pawns::init();
   Threads.init();
-  Tablebases::init(Options["SyzygyPath"]);
-  tzbook.init(Options["BookPath"]);
-  TT.resize(Options["Hash"]);
+
+#ifdef SYZYGY_TB
+	  Tablebases::init(Options["SyzygyPath"]);
+#endif
+
+#ifdef LOMONOSOV_TB
+  //init Lomonosov TB
+  int load_dll = -1;
+  if ((load_dll = load_lomonosov_tb()) == 0) {
+	  Search::lomonosov_tb_loaded = true;
+	  std::cout << "Lomonosov tables loaded" << std::endl;
+  }
+  else {
+	  Search::lomonosov_tb_loaded = false;
+	  std::cout << "Lomonosov tables not loaded" << std::endl;
+  }
+#endif
 
   UCI::loop(argc, argv);
+#ifdef LARGEPAGES
+  if (large_use) {
+    FREE_MEM(TT.mem);  
+    TT.mem = nullptr;
+  }
+#endif
 
   Threads.exit();
   return 0;
