@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -23,62 +23,8 @@
 
 #include "bitboard.h"
 #include "tt.h"
-#include "uci.h"
-#include "windows.h"
 
 TranspositionTable TT; // Our global transposition table
-int use_large_pages = -1;
-int got_privileges = -1;
-
-
-bool Get_LockMemory_Privileges()
-{
-    HANDLE TH, PROC7;
-    TOKEN_PRIVILEGES tp;
-    bool ret = false;
-
-    PROC7 = GetCurrentProcess();
-    if (OpenProcessToken(PROC7, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TH))
-    {
-        if (LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid))
-        {
-            tp.PrivilegeCount = 1;
-            tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-            if (AdjustTokenPrivileges(TH, FALSE, &tp, 0, NULL, 0))
-            {
-                if (GetLastError() != ERROR_NOT_ALL_ASSIGNED)
-                    ret = true;
-            }
-        }
-        CloseHandle(TH);
-    }
-    return ret;
-}
-
-
-void Try_Get_LockMemory_Privileges()
-{
-    use_large_pages = 0;
-
-    if (Options["Large Pages"] == false)    
-        return;
-
-    if (got_privileges == -1)
-    {
-        if (Get_LockMemory_Privileges() == true)
-            got_privileges = 1;
-        else
-        {
-            sync_cout << "No Privilege for Large Pages" << sync_endl;
-            got_privileges = 0;
-        }
-    }
-
-    if (got_privileges == 0)      
-        return;
-
-    use_large_pages = 1;        
-}
 
 
 /// TranspositionTable::resize() sets the size of the transposition table,
@@ -87,70 +33,15 @@ void Try_Get_LockMemory_Privileges()
 
 void TranspositionTable::resize(size_t mbSize) {
 
-  if (mbSize == 0)
-      mbSize = mbSize_last_used;
-
-  if (mbSize == 0)
-      return;
-
-  mbSize_last_used = mbSize;
-
-  Try_Get_LockMemory_Privileges();
-
   size_t newClusterCount = size_t(1) << msb((mbSize * 1024 * 1024) / sizeof(Cluster));
 
   if (newClusterCount == clusterCount)
-  {
-      if ((use_large_pages == 1) && (large_pages_used))      
-          return;
-      if ((use_large_pages == 0) && (large_pages_used == false))
-          return;
-  }
+      return;
 
   clusterCount = newClusterCount;
- 
-  if (use_large_pages < 1)
-  {
-      if (mem != NULL)
-      {
-          if (large_pages_used)
-              VirtualFree(mem, 0, MEM_RELEASE);
-          else          
-              free(mem);
-      }
-      uint64_t memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
-      mem = calloc(memsize, 1);
-      large_pages_used = false;
-  }
-  else
-  {
-      if (mem != NULL)
-      {
-          if (large_pages_used)
-              VirtualFree(mem, 0, MEM_RELEASE);
-          else
-              free(mem);
-      }
 
-      int64_t memsize = clusterCount * sizeof(Cluster);
-      mem = VirtualAlloc(NULL, memsize, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-      if (mem == NULL)
-      {
-          std::cerr << "Failed to allocate " << mbSize
-              << "MB Large Page Memory for transposition table, switching to default" << std::endl;
-
-          use_large_pages = 0;
-          memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
-          mem = calloc(memsize, 1);
-          large_pages_used = false;
-      }
-      else
-      {
-          sync_cout << "info string Hash LargePages " << (memsize >> 20) << " Mb" << sync_endl;
-          large_pages_used = true;
-      }
-        
-  }
+  free(mem);
+  mem = calloc(clusterCount * sizeof(Cluster) + CacheLineSize - 1, 1);
 
   if (!mem)
   {
@@ -201,19 +92,19 @@ TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
       // nature we add 259 (256 is the modulus plus 3 to keep the lowest
       // two bound bits from affecting the result) to calculate the entry
       // age correctly even after generation8 overflows into the next cycle.
-      if (  replace->depth8 - ((259 + generation8 - replace->genBound8) & 0xFC) * 2
-          >   tte[i].depth8 - ((259 + generation8 -   tte[i].genBound8) & 0xFC) * 2)
+      if (  replace->depth8 - ((259 + generation8 - replace->genBound8) & 0xFC) * 2 * ONE_PLY
+          >   tte[i].depth8 - ((259 + generation8 -   tte[i].genBound8) & 0xFC) * 2 * ONE_PLY)
           replace = &tte[i];
 
   return found = false, replace;
 }
 
 
-/// TranspositionTable::hashfull() returns an approximation of the hashtable
-/// occupation during a search. The hash is x permill full, as per UCI protocol.
+/// Returns an approximation of the hashtable occupation during a search. The
+/// hash is x permill full, as per UCI protocol.
 
-int TranspositionTable::hashfull() const {
-
+int TranspositionTable::hashfull() const
+{
   int cnt = 0;
   for (int i = 0; i < 1000 / ClusterSize; i++)
   {

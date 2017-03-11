@@ -2,7 +2,7 @@
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
   Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
-  Copyright (C) 2015-2017 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+  Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ namespace {
   enum TimeType { OptimumTime, MaxTime };
 
   const int MoveHorizon   = 50;   // Plan time management at most this many moves ahead
-  const double MaxRatio   = 7.09; // When in trouble, we can step over reserved time with this ratio
+  const double MaxRatio   = 7.09;  // When in trouble, we can step over reserved time with this ratio
   const double StealRatio = 0.35; // However we must not steal time from remaining moves over this ratio
 
 
@@ -52,8 +52,8 @@ namespace {
   }
 
   template<TimeType T>
-  int remaining(int myTime, int movesToGo, int ply, int slowMover) {
-
+  int remaining(int myTime, int movesToGo, int ply, int slowMover)
+  {
     const double TMaxRatio   = (T == OptimumTime ? 1 : MaxRatio);
     const double TStealRatio = (T == OptimumTime ? 0 : StealRatio);
 
@@ -81,8 +81,8 @@ namespace {
 ///  inc >  0 && movestogo == 0 means: x basetime + z increment
 ///  inc >  0 && movestogo != 0 means: x moves in y minutes + z increment
 
-void TimeManagement::init(Search::LimitsType& limits, Color us, int ply) {
-
+void TimeManagement::init(Search::LimitsType& limits, Color us, int ply)
+{
   int minThinkingTime = Options["Minimum Thinking Time"];
   int moveOverhead    = Options["Move Overhead"];
   int slowMover       = Options["Slow Mover"];
